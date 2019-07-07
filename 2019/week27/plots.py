@@ -9,9 +9,13 @@ import utils
 
 import tqdm
 
+plt.rcParams["font.family"] = "Georgia"
+
 MAX = 60
-VARS = np.linspace(0.1, MAX, 20)
-REPS = 20
+VARS = np.linspace(0.1, MAX, 100)
+REPS = 40
+
+WIDTH = 8
 
 def basic(axes=None):
     """
@@ -195,10 +199,59 @@ for v, var in tqdm.tqdm(enumerate(VARS)):
             iterf_maxdiff[v, r] = (iterf_max - maxes).abs().mean()
 
 
-plt.figure(figsize=(12, 12))
 c = ('#73a7d3', '#b13e26', '#d38473', '#677d00', '#acd373')
 
-_, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, sharex=True)
+## Figure 1: Just the naive approach
+
+plt.figure(figsize=(WIDTH, WIDTH/4))
+
+ax1 = plt.gca()
+
+ax1.bar(VARS, naive_nans.sum(axis=1) / REPS, color=c[0])
+
+ax1.set_ylabel('prop. NaN')
+ax1.set_xlabel('variance of non-sparse elements')
+
+ax1.legend(frameon=False)
+
+basic(ax1)
+
+plt.tight_layout()
+
+plt.savefig('plot-naive.svg')
+plt.savefig('plot-naive.png')
+
+## Figure 2: The naive together with the pnorm
+
+
+fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(WIDTH, WIDTH/2))
+w = MAX/len(VARS)/3
+
+ax1.bar(VARS - w * 1.5, naive_nans.sum(axis=1) / REPS, width=w, label='naive', color=c[0])
+ax1.bar(VARS - w * .5, pnorm_nans.sum(axis=1) / REPS, width=w, label='p-norm, p={}'.format(PNP), color=c[1])
+ax1.bar(VARS + w * 0.5, pnorm_nans.sum(axis=1) / REPS, width=w, label='p-norm, p={}'.format(PNFP), color=c[2])
+
+ax1.set_ylabel('prop. NaN')
+
+ax1.legend(frameon=False)
+basic(ax1)
+
+ax2.errorbar(x=VARS[:first_nan[0]], y=naive_diff[:first_nan[0], :].mean(axis=1), yerr=naive_diff[:first_nan[0], :].std(axis=1), label='naive', color=c[0])
+ax2.errorbar(x=VARS[:first_nan[1]], y=pnorm_diff[:first_nan[1], :].mean(axis=1), yerr=pnorm_diff[:first_nan[1], :].std(axis=1), label='p-norm, p={}'.format(PNP), color=c[1])
+ax2.errorbar(x=VARS[:first_nan[2]], y=pnorf_diff[:first_nan[2], :].mean(axis=1), yerr=pnorf_diff[:first_nan[2], :].std(axis=1), label='p-norm, p={}'.format(PNFP), color=c[2])
+
+ax2.set_xlabel('variance of non-sparse elements')
+ax2.set_ylabel('dev. from 1')
+basic(ax2)
+
+plt.tight_layout()
+
+plt.savefig('plot-pnorm.svg')
+plt.savefig('plot-pnorm.png')
+
+## Figure 3: All three approaches
+
+_, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, sharex=True, figsize=(WIDTH, WIDTH))
 w = MAX/len(VARS)/5
 
 ax1.bar(VARS - w * 2.5, naive_nans.sum(axis=1) / REPS, width=w, label='naive', color=c[0])
@@ -242,5 +295,5 @@ basic(ax4)
 
 plt.tight_layout()
 
-plt.savefig('plot.pdf')
-plt.savefig('plot.png')
+plt.savefig('plot-all.svg')
+plt.savefig('plot-all.png')
