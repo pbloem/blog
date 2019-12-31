@@ -9,30 +9,48 @@ from functools import total_ordering
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import cm, colors
 
 from skimage.io import imsave
 
 from tqdm import trange
+
+from PIL import Image
 
 from collections import deque
 
 def u(mi, mx):
     return random.uniform(mi, mx)
 
+SEED = random.randint(-1_000_000_000, 1_000_000_000)
+print('seed', SEED)
+random.seed(SEED)
+
 # total runtime in seconds
 TOTALTIME = 30 * 60
-# Safety margin for producing output
+# Safety margin for producing output in seconds
 MARGIN = 10
 
 NUMDEST = 1
 BASECOST = 1.0
-MAPSIZE = random.choice([[135, 240], [270, 480], [540, 960],  [720, 1280], [1080, 1920], ])
 
-NUM_AGENTS = random.choice([1, 2, 5, 10, 100])
+GIF = random.choice([True, False])
+print('gif?', GIF)
+FRAMES = 240
+
+MAPSIZE = random.choice([[135, 240], [270, 480]]) if GIF else \
+          random.choice([[540, 960], [720, 1280], [1080, 1920]])
+print('map size', MAPSIZE)
+
+NUM_AGENTS = random.choice([1, 2, 3, 4, 5, 7, 10, 100])
+print('num agents', NUM_AGENTS)
+
 PLOT_EVERY = 1_000
 PLOT_THESE = [0, 10, 100, 200, 300, 500]
 
 MOVES = random.choice(['four', 'diag', 'eight', 'circ'])
+print('moves', MOVES)
+
 MOVES_FOUR = [(0, 1), (1, 0), (0, -1), (-1, 0)]
 DIAG = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
 MOVES_EIGHT = MOVES_FOUR + DIAG
@@ -42,13 +60,18 @@ CIRC_DIAM = 10.0
 CIRC_MOVES = 120
 MOVES_CIRC = [(int(CIRC_DIAM * cos(r)), int(CIRC_DIAM * sin(r))) for r in np.linspace(0.0, 2*math.pi, CIRC_MOVES)]
 
-IMPROVEMENT = 10.0 ** (u(-2.0, 2.0))
-IMPROVEMENT_VAR = random.choice([None, u(0.0, 5.0)])
+IMPROVEMENT = 10.0 ** (u(-1.5, 1.0))
+IMPROVEMENT_VAR = random.choice(['perant', None, u(0.0, 5.0)])
+IMPROVEMENT_REPS = random.choice([1, 2, 3, 10, 25])
 
-INIT = random.choice(['blank', 'grad', 'white', 'bell'])
+INIT = random.choice(['blank', 'grad', 'bell'])
 INIT_NOISE = random.choice([0.0, u(0.0, 1.0)])
-print(INIT_NOISE)
 INIT_INVERT = random.choice([True, False])
+
+COLORMAP = random.choice([
+        random.choice([cm.copper, cm.bone, cm.gray]),
+        random.choice([cm.viridis, cm.plasma, cm.inferno, cm.magma, cm.RdPu, cm.pink, cm.RdYlBu])
+    ])
 
 global starttime
 starttime = time.time()
@@ -75,6 +98,20 @@ def rescale(array):
     range = array.max() - array.min()
     return (array - array.min()) / range
 
+def toimage(array, pil=False):
+    # range = array.max() - array.min()
+    # rescaled =  (array - array.min()) / range
+
+    array = np.log(1.0 + array)
+
+    norm = colors.Normalize(vmin=0.)
+    rgb = COLORMAP(norm(array))
+    if not pil:
+        return rgb
+
+    return Image.fromarray(np.uint8(rgb*255))
+
+
 def clean(axes=None):
 
     if axes is None:
@@ -97,8 +134,10 @@ class Agent:
         self.plan = None
         self.map = map
 
+        self.improvement_var = random.choice([0.0, u(0.0, 5.0)]) if IMPROVEMENT_VAR == 'perant' else None
+
     def move(self):
-        if not self.plan: # empty or None
+        if not bool(self.plan): # empty or None
 
             # Choose a new destination
             cost = float('inf')
@@ -106,13 +145,17 @@ class Agent:
                 cdest = (random.randint(0, self.nx-1), random.randint(0, self.ny-1))
                 cplan, ccost = pathplan(self.map, self.pos, cdest)
                 if cplan is None:
-                    return False;
+                    return False
 
                 if ccost < cost:
                     cost = ccost
                     self.plan = cplan
 
-        dx, dy = self.plan.popleft()
+        try:
+            dx, dy = self.plan.popleft()
+        except Exception as e:
+            print(self.plan)
+            raise e
 
         # move agent
         self.pos = (self.pos[0] + dx, self.pos[1] + dy)
@@ -120,12 +163,17 @@ class Agent:
         # improve infrastructure
         x, y = self.pos[0], self.pos[1]
         if IMPROVEMENT_VAR is not None:
-            x += int(random.gauss(0, 1) * IMPROVEMENT_VAR)
-            y += int(random.gauss(0, 1) * IMPROVEMENT_VAR)
-            x = min(max(x, 0), map.shape[0]-1)
-            y = min(max(y, 0), map.shape[1]-1)
+            impvar = IMPROVEMENT_VAR if self.improvement_var is None else self.improvement_var
 
-        map[x, y] += IMPROVEMENT
+            for _ in range(IMPROVEMENT_REPS):
+                xt = x + int(random.gauss(0, 1) * impvar)
+                yt = y + int(random.gauss(0, 1) * impvar)
+                xt = min(max(xt, 0), map.shape[0]-1)
+                yt = min(max(yt, 0), map.shape[1]-1)
+                map[xt, yt] += IMPROVEMENT/IMPROVEMENT_REPS
+
+        else:
+            map[x, y] += IMPROVEMENT
 
         return True
 
@@ -166,7 +214,7 @@ def pathplan(map, fr, to):
                 if npos[0] >= map.shape[0] or npos[0] < 0 or npos[1] >= map.shape[1] or npos[1] < 0:
                     continue;
 
-                movecost = BASECOST + (1.0 / map[npos[0], npos[1]])
+                movecost = BASECOST + (1.0 / (map[npos[0], npos[1]] + 10e-10))
                 ncost = self.cost + movecost
 
                 yield Node(npos, ncost, self)
@@ -247,12 +295,26 @@ elif INIT == 'grad':
 
 elif INIT == 'bell':
 
-    asp = MAPSIZE[0]/MAPSIZE[1]
-    x, y = np.linspace(-1, 1, MAPSIZE[1]), np.linspace(-asp, asp, MAPSIZE[0])
-    mesh = np.meshgrid(x, y)
-    map = np.exp((- mesh[0] ** 2 - mesh[1] **2)/0.1)
+    map = np.zeros(shape=MAPSIZE)
 
-map *= (np.random.rand(*MAPSIZE) * INIT_NOISE + (1.0 - INIT_NOISE))
+    for _ in range(random.choice([1, 2, 3, 4, 5])):
+
+        asp = MAPSIZE[0]/MAPSIZE[1]
+
+        xmid = u(-1, 1)
+        ymid = u(-asp, asp)
+        var = 10 ** u(-2, 0.1)
+
+        x, y = np.linspace(-1 + xmid, 1+xmid, MAPSIZE[1]), np.linspace(-asp+ymid, asp+ymid, MAPSIZE[0])
+        mesh = np.meshgrid(x, y)
+        map += np.exp((- mesh[0] ** 2 - mesh[1] **2)/var)
+
+    map += 0.00001
+else:
+    raise Exception(f'INIT {INIT} not recognized.')
+
+map += np.random.rand(*MAPSIZE) * INIT_NOISE * 0.25
+
 
 if INIT_INVERT:
     map = rescale(map)
@@ -265,6 +327,12 @@ agents = [Agent(map) for _ in range(NUM_AGENTS)]
 # plt.figure(figsize=(16, 9))
 
 it = 0;
+
+if GIF:
+    perframe = (TOTALTIME - MARGIN)/FRAMES
+    t0 = time.time()
+    images = []
+    f = 0
 
 while True:
 
@@ -283,11 +351,22 @@ while True:
         # clean()
         # plt.imshow(map, cmap='copper')
         # plt.savefig(f'plot.{it:06}.png')
-        imsave(f'plot.{it:06}.png', rescale(map), check_contrast=False)
+        imsave(f'plot.{it:06}.png', toimage(map), check_contrast=False)
+
+    if GIF and time.time() - t0 > perframe:
+        images.append(toimage(map, pil=True))
+        t0 = time.time()
+
+        images[-1].save(fp=f'frame{f:02}.png', format='PNG')
+        f += 1
+
 
     it += 1
 
-imsave(f'final.png', rescale(map), check_contrast=False)
+if GIF:
+    images[0].save(fp='final.gif', format='GIF', append_images=images, save_all=True)
+
+imsave(f'final.png', toimage(map), check_contrast=False)
 
 print('done')
 
