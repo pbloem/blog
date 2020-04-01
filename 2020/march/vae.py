@@ -289,8 +289,11 @@ def go(arg):
     encoder = Encoder(in_size=(H, W), zsize=arg.zsize, depth=arg.vae_depth, colors=C)
     decoder = Decoder(in_size=(H, W), zsize=arg.zsize, depth=arg.vae_depth, out_channels=2)
 
-    opt = torch.optim.Adam(lr=arg.lr, params=list(encoder.parameters()) + list(decoder.parameters()))
+    if torch.cuda.is_available():
+        encoder.cuda()
+        decoder.cuda()
 
+    opt = torch.optim.Adam(lr=arg.lr, params=list(encoder.parameters()) + list(decoder.parameters()))
 
 
     for epoch in range(arg.epochs):
@@ -311,7 +314,6 @@ def go(arg):
             z = sample(*zs)
 
             out = decoder(z)
-
 
             # compute -log p per dimension
             if arg.rloss == 'xent': # binary cross-entropy (not a proper log-prob)
@@ -360,6 +362,10 @@ def go(arg):
             # Plot reconstructions
 
             inputs, _ = next(iter(testloader))
+
+            if torch.cuda.is_available():
+                inputs.cuda()
+
             b, c, h, w = inputs.size()
 
             zs = encoder(input)
