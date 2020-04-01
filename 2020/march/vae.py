@@ -93,129 +93,69 @@ class Reshape(nn.Module):
     def forward(self, input):
         return input.view( (input.size(0),) + self.shape)
 
-class Block(nn.Module):
+class Debug(nn.Module):
     """
-    Convolutional block with residual connections.
-
+    Executes a lambda function and then returns the input. Useful for debugging.
     """
-
-    def __init__(self, in_channels, channels, num_convs = 3, kernel_size = 3,
-                 batch_norm=False, use_weight=True, use_res=True, deconv=False):
-        super().__init__()
-
-        layers = []
-        self.use_weight = use_weight
-        self.use_res = use_res
-
-        padding = int(math.floor(kernel_size / 2))
-
-        self.upchannels = nn.Conv2d(in_channels, channels, kernel_size=1)
-
-        for i in range(num_convs):
-            if deconv:
-                layers.append(nn.ConvTranspose2d(channels, channels, kernel_size=kernel_size, padding=padding, bias=not batch_norm))
-            else:
-                layers.append(nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=padding, bias=not batch_norm))
-
-            if batch_norm:
-                layers.append(nn.BatchNorm2d(channels))
-
-            layers.append(nn.ReLU())
-
-        self.seq = nn.Sequential(*layers)
-
-        if use_weight:
-            self.weight = nn.Parameter(torch.randn(1))
-
+    def __init__(self, lambd):
+        super(Debug, self).__init__()
+        self.lambd = lambd
     def forward(self, x):
-
-        x = self.upchannels(x)
-
-        out = self.seq(x)
-
-        if not self.use_res:
-            return out
-
-        if not self.use_weight:
-            return out + x
-
-        return out + self.weight * x
+        self.lambd(x)
+        return x
 
 class Encoder(nn.Module):
     """
     Encoder for a VAE
     """
-    def __init__(self, in_size, zsize=32, use_res=False, use_bn=False, depth=0, colors=3):
-        a, b, c = 16, 64, 128  # channel sizes
-        p, q, r = 2, 2, 2  # up/downsampling
+
+    def __init__(self, zsize=32, colors=3):
 
         super().__init__()
-        self.zsize = zsize
 
-        # - Encoder
-        modules = [
-            Block(colors, a, use_res=use_res, batch_norm=use_bn),
-            nn.MaxPool2d((p, p)),
-            Block(a, b, use_res=use_res, batch_norm=use_bn),
-            nn.MaxPool2d((q, q)),
-            Block(b, c, use_res=use_res, batch_norm=use_bn),
-            nn.MaxPool2d((r, r)),
-        ]
+        a, b, c = 16, 32, 128
 
-        for i in range(depth):
-            modules.append(Block(c, c, use_res=use_res, batch_norm=use_bn))
+        self.stack = nn.Sequential(
+            nn.Conv2d(1, a, (3, 3), padding=1), nn.ReLU(),
+            nn.MaxPool2d((2, 2)),
+            nn.Conv2d(a, b, (3, 3), padding=1), nn.ReLU(),
+            nn.Conv2d(b, b, (3, 3), padding=1), nn.ReLU(),
+            nn.MaxPool2d((2, 2)),
+            nn.Conv2d(b, c, (3, 3), padding=1), nn.ReLU(),
+            nn.Conv2d(c, c, (3, 3), padding=1), nn.ReLU(),
+            nn.MaxPool2d((2, 2)),
+            # Debug(lambda x: print(x.size())),
+            nn.Flatten(),
+            nn.Linear(4 * 4 * c, 2 * zsize)
+        )
 
-        modules.extend([
-            Flatten(),
-            nn.Linear((in_size[0] // (p*q*r)) * (in_size[1] //  (p*q*r)) * c, zsize * 2)
-        ])
+    def forward(self, x):
 
-        self.encoder = nn.Sequential(*modules)
-
-    def forward(self, image):
-
-        zcomb = self.encoder(image)
-        return zcomb[:, :self.zsize], zcomb[:, self.zsize:]
+        return self.stack(x)
 
 class Decoder(nn.Module):
     """
     Decoder for a VAE
     """
-    def __init__(self, in_size, zsize=32, use_res=False, use_bn=False, depth=0, out_channels=1):
+    def __init__(self, zsize=32, out_channels=1):
         super().__init__()
 
-        a, b, c = 60, 64, 128  # channel sizes
-        p, q, r = 2, 2, 2  # up/downsampling
+        a, b, c = 16, 32, 128
 
-        self.zsize = zsize
+        self.stack = nn.Sequential(
+            nn.Linear(zsize, c * 4 * 4), nn.ReLU(),
+            Reshape((c, 4, 4)),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
+            nn.ConvTranspose2d(c, b, (3, 3), padding=1), nn.ReLU(),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
+            nn.ConvTranspose2d(b, a, (3, 3), padding=1), nn.ReLU(),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
+            nn.ConvTranspose2d(a, 1, (3, 3), padding=1)
+        )
 
-        #- Decoder
-        upmode = 'bilinear'
-        modules = [
-            nn.Linear(zsize, (in_size[0] // (p*q*r)) * (in_size[1] // (p*q*r)) * c), nn.ReLU(),
-            Reshape((c, in_size[0] // (p*q*r), in_size[1] // (p*q*r)))
-        ]
+    def forward(self, z):
 
-        for _ in range(depth):
-            modules.append(Block(c, c, deconv=True, use_res=use_res, batch_norm=use_bn) )
-
-
-        modules.extend([
-            nn.Upsample(scale_factor=r, mode=upmode),
-            Block(c, c, deconv=True, use_res=use_res, batch_norm=use_bn),
-            nn.Upsample(scale_factor=q, mode=upmode),
-            Block(c, b, deconv=True, use_res=use_res, batch_norm=use_bn),
-            nn.Upsample(scale_factor=p, mode=upmode),
-            Block(b, a, deconv=True, use_res=use_res, batch_norm=use_bn),
-            nn.ConvTranspose2d(a, out_channels, kernel_size=1, padding=0)
-        ])
-
-        self.decoder = nn.Sequential(*modules)
-
-    def forward(self, zsample):
-
-        return self.decoder(zsample)
-
+        return self.stack(z)
 
 def go(arg):
 
@@ -288,8 +228,8 @@ def go(arg):
 
     print(f'out channels: {out_channels}')
 
-    encoder = Encoder(in_size=(H, W), zsize=arg.zsize, depth=arg.vae_depth, colors=C)
-    decoder = Decoder(in_size=(H, W), zsize=arg.zsize, depth=arg.vae_depth, out_channels=out_channels)
+    encoder = Encoder(zsize=arg.zsize, colors=C)
+    decoder = Decoder(zsize=arg.zsize, out_channels=out_channels)
 
     if torch.cuda.is_available():
         encoder.cuda()
@@ -312,8 +252,8 @@ def go(arg):
             # Forward pass
             zs = encoder(input)
 
-            kloss = kl_loss(*zs)
-            z = sample(*zs)
+            kloss = kl_loss(zs[:, :arg.zsize], zs[:, arg.zsize:])
+            z = sample(zs[:, :arg.zsize], zs[:, arg.zsize:])
 
             out = decoder(z)
 
