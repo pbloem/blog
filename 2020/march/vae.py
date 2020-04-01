@@ -315,6 +315,7 @@ def go(arg):
 
             zs = encoder(inputs)
             outputs = decoder(zs[:, :arg.zsize])[:, :c, :, :]
+            oputputs = T.sigmoid(outputs)
 
             plt.figure(figsize=(5, 2))
 
