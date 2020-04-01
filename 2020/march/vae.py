@@ -63,7 +63,6 @@ def sample(zmean, zlsig, eps=None):
         eps = torch.randn(b, l)
         if zmean.is_cuda:
             eps = eps.cuda()
-        eps = Variable(eps)
 
     return zmean + eps * (zlsig * 0.5).exp()
 
@@ -150,7 +149,7 @@ class Decoder(nn.Module):
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
             nn.ConvTranspose2d(b, a, (3, 3), padding=1), nn.ReLU(),
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
-            nn.ConvTranspose2d(a, 1, (3, 3), padding=1)
+            nn.ConvTranspose2d(a, out_channels, (3, 3), padding=1)
         )
 
     def forward(self, z):
@@ -314,7 +313,7 @@ def go(arg):
 
             b, c, h, w = inputs.size()
 
-            zs = encoder(input)
+            zs = encoder(inputs)
             outputs = decoder(zs[:, :arg.zsize])[:, :c, :, :]
 
             plt.figure(figsize=(5, 2))
