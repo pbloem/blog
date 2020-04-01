@@ -237,7 +237,6 @@ def go(arg):
 
     opt = torch.optim.Adam(lr=arg.lr, params=list(encoder.parameters()) + list(decoder.parameters()))
 
-
     for epoch in range(arg.epochs):
 
         for i, (input, _) in enumerate(tqdm.tqdm(trainloader)):
@@ -316,7 +315,7 @@ def go(arg):
             b, c, h, w = inputs.size()
 
             zs = encoder(input)
-            outputs = decoder(zs[0])[:, :c, :, :]
+            outputs = decoder(zs[:, :arg.zsize])[:, :c, :, :]
 
             plt.figure(figsize=(5, 2))
 
