@@ -309,7 +309,7 @@ def go(arg):
             inputs, _ = next(iter(testloader))
 
             if torch.cuda.is_available():
-                inputs.cuda()
+                inputs = inputs.cuda()
 
             b, c, h, w = inputs.size()
 
