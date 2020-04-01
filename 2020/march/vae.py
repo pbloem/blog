@@ -1,4 +1,4 @@
-import os, tqdm, random, pickle, math
+import os, tqdm, random, pickle, math, sys
 
 import torch
 import torch as T
@@ -286,8 +286,10 @@ def go(arg):
     if (arg.rloss == 'gaussian' or arg.rloss=='laplace') and arg.scale is None:
         out_channels = 2
 
+    print(f'out channels: {out_channels}')
+
     encoder = Encoder(in_size=(H, W), zsize=arg.zsize, depth=arg.vae_depth, colors=C)
-    decoder = Decoder(in_size=(H, W), zsize=arg.zsize, depth=arg.vae_depth, out_channels=2)
+    decoder = Decoder(in_size=(H, W), zsize=arg.zsize, depth=arg.vae_depth, out_channels=out_channels)
 
     if torch.cuda.is_available():
         encoder.cuda()
@@ -320,7 +322,12 @@ def go(arg):
                 out = T.sigmoid(out)
 
                 rloss = - input * out.log() - (1 - input) * (1 - out).log()
-            elif arg.rloss == 'bdist': # xent + correction
+
+            elif arg.rloss == 'xent-torch':  # binary cross-entropy (not a proper log-prob)
+
+                rloss = F.binary_cross_entropy_with_logits(out, input, reduction='none')
+
+            elif arg.rloss == 'bdist': #   xent + correction
                 out = T.sigmoid(out)
 
                 rloss = - input * out.log() - (1 - input) * (1 - out).log()
