@@ -37,7 +37,6 @@ def ln(x):
     return math.log(x, math.e)
 
 GAUSS_CONST = 0.5 * ln(2.0 * math.pi)
-EPS = 10e-7
 
 def atanh(x):
     """
@@ -266,7 +265,7 @@ def go(arg):
 
                 za = out.abs()
                 eza = (-za).exp()
-                logpart =  - za.log() + (-eza + EPS).log1p() - (eza + EPS).log1p() # logarithm of the normalization constant
+                logpart =  - za.log() + (-eza + arg.eps).log1p() - (eza + arg.eps).log1p() # logarithm of the normalization constant
 
                 rloss = rloss - logpart
 
@@ -404,6 +403,11 @@ if __name__ == "__main__":
                         dest="lr",
                         help="Learning rate.",
                         default=0.001, type=float)
+
+    parser.add_argument("--eps",
+                        dest="eps",
+                        help="Epsilon for stability.",
+                        default=10e-5, type=float)
 
     parser.add_argument("-D", "--data-directory",
                         dest="data_dir",
