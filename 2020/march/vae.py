@@ -37,6 +37,7 @@ def ln(x):
     return math.log(x, math.e)
 
 GAUSS_CONST = 0.5 * ln(2.0 * math.pi)
+EPS = 10e-7
 
 def atanh(x):
     """
@@ -257,19 +258,18 @@ def go(arg):
 
             # compute -log p per dimension
             if arg.rloss == 'xent': # binary cross-entropy (not a proper log-prob)
-                out = T.sigmoid(out)
-
-                rloss = - input * out.log() - (1 - input) * (1 - out).log()
-
-            elif arg.rloss == 'xent-torch':  # binary cross-entropy (not a proper log-prob)
 
                 rloss = F.binary_cross_entropy_with_logits(out, input, reduction='none')
 
             elif arg.rloss == 'bdist': #   xent + correction
-                out = T.sigmoid(out)
+                rloss = F.binary_cross_entropy_with_logits(out, input, reduction='none')
 
-                rloss = - input * out.log() - (1 - input) * (1 - out).log()
-                rloss = rloss - (1 - 2 * out).log() - (atanh(1 - 2 * out) * 2.0).log()
+                za = out.abs()
+                eza = (-za).exp()
+                logpart =  - za.log() + (-eza + 1).log() - (eza + 1).log() # logarithm of the normalization constant
+
+                rloss = rloss - logpart
+
             elif arg.rloss == 'gauss': # xent + correction
                 if arg.scale is None:
                     means = T.sigmoid(out[:, :1, :, :])
