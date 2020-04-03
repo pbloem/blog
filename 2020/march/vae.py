@@ -266,7 +266,7 @@ def go(arg):
 
                 za = out.abs()
                 eza = (-za).exp()
-                logpart =  - za.log() + (-eza + 1).log() - (eza + 1).log() # logarithm of the normalization constant
+                logpart =  - za.log() + (-eza + EPS).log1p() - (eza + EPS).log1p() # logarithm of the normalization constant
 
                 rloss = rloss - logpart
 
