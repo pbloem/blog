@@ -267,9 +267,11 @@ def go(arg):
 
                 za = out.abs()
                 eza = (-za).exp()
-                logpart = (-eza + arg.eps).log1p() + (eza + arg.eps).log1p() + za - (za + arg.eps).log()
 
-                rloss = rloss - logpart
+                # - np.log(za) + np.log1p(-eza + EPS) - np.log1p(eza + EPS)
+                logpart = - (za + arg.eps).log() + (-eza + arg.eps).log1p() - (eza + arg.eps).log1p()
+
+                rloss = rloss + logpart
 
             elif arg.rloss == 'gauss': # xent + correction
                 if arg.scale is None:
