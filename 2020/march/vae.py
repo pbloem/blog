@@ -136,7 +136,7 @@ class Decoder(nn.Module):
     """
     Decoder for a VAE
     """
-    def __init__(self, zsize=32, out_channels=1):
+    def __init__(self, zsize=32, out_channels=1, mult=1.0):
         super().__init__()
 
         a, b, c = 16, 32, 128
@@ -152,9 +152,11 @@ class Decoder(nn.Module):
             nn.ConvTranspose2d(a, out_channels, (3, 3), padding=1)
         )
 
+        self.mult = mult
+
     def forward(self, z):
 
-        return self.stack(z)
+        return self.mult * self.stack(z)
 
 def go(arg):
 
@@ -228,7 +230,7 @@ def go(arg):
     print(f'out channels: {out_channels}')
 
     encoder = Encoder(zsize=arg.zsize, colors=C)
-    decoder = Decoder(zsize=arg.zsize, out_channels=out_channels)
+    decoder = Decoder(zsize=arg.zsize, out_channels=out_channels, arg.mult)
 
     if torch.cuda.is_available():
         encoder.cuda()
@@ -408,6 +410,11 @@ if __name__ == "__main__":
                         dest="eps",
                         help="Epsilon for stability.",
                         default=10e-5, type=float)
+
+    parser.add_argument("--mult",
+                        dest="mult",
+                        help="Multiplier for the logits.",
+                        default=0.01, type=float)
 
     parser.add_argument("-D", "--data-directory",
                         dest="data_dir",
