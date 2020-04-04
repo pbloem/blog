@@ -230,7 +230,7 @@ def go(arg):
     print(f'out channels: {out_channels}')
 
     encoder = Encoder(zsize=arg.zsize, colors=C)
-    decoder = Decoder(zsize=arg.zsize, out_channels=out_channels, arg.mult)
+    decoder = Decoder(zsize=arg.zsize, out_channels=out_channels, mult=arg.mult)
 
     if torch.cuda.is_available():
         encoder.cuda()
