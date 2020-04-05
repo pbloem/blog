@@ -47,6 +47,15 @@ def atanh(x):
     """
     return 0.5 * torch.log( (1+x) / (1-x))
 
+def contains_nan(input):
+    if (not isinstance(input, torch.Tensor)) and isinstance(input, Iterable):
+        for i in input:
+            if contains_nan(i):
+                return True
+        return False
+    else:
+        return bool(torch.isnan(input).sum() > 0)
+
 def kl_loss(zmean, zlsig):
     b, l = zmean.size()
 
@@ -224,7 +233,7 @@ def go(arg):
 
     ## Set up the model
     out_channels = 1
-    if (arg.rloss == 'gaussian' or arg.rloss=='laplace') and arg.scale is None:
+    if (arg.rloss == 'gauss' or arg.rloss=='laplace') and arg.scale is None:
         out_channels = 2
 
     print(f'out channels: {out_channels}')
@@ -293,7 +302,7 @@ def go(arg):
                     means = out[:, :1, :, :]
                     var = arg.scale
 
-                    rloss =  GAUSS_CONST + ln(var) + (1.0/(2.0 * (var * var))) * (out - means).pow(2.0)
+                    rloss = GAUSS_CONST + ln(var) + (1.0/(2.0 * (var * var))) * (out - means).pow(2.0)
             elif arg.rloss == 'laplace':  # xent + correction
                 if arg.scale is None:
                     means = T.sigmoid(out[:, :1, :, :])
@@ -305,6 +314,11 @@ def go(arg):
                     var = arg.scale
 
                     rloss = ln(2.0 * var) + (1.0/var) * (out - means).abs()
+            else:
+                raise Exception(f'reconstruction loss {arg.rloss} not recognized.')
+
+            if contains_nan(rloss):
+                raise Exception('rloss contains nan')
 
             rloss = rloss.reshape(b, -1).sum(dim=1) # reduce
             loss  = (rloss + kloss).mean()
