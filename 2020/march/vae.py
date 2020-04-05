@@ -286,14 +286,14 @@ def go(arg):
             elif arg.rloss == 'gauss': # xent + correction
                 if arg.scale is None:
                     means = T.sigmoid(out[:, :1, :, :])
-                    vars  = F.softplus( out[:, 1:, :, :])
+                    vars  = F.sigmoid( out[:, 1:, :, :])
 
                     rloss = GAUSS_CONST + vars.log() + (1.0/(2.0 * vars.pow(2.0))) * (out - means).pow(2.0)
                 else:
                     means = out[:, :1, :, :]
                     var = arg.scale
 
-                    rloss =  GAUSS_CONST + ln(var) + (1.0/(2.0 * (var ** 2.0))) * (out - means).pow(2.0)
+                    rloss =  GAUSS_CONST + ln(var) + (1.0/(2.0 * (var * var))) * (out - means).pow(2.0)
             elif arg.rloss == 'laplace':  # xent + correction
                 if arg.scale is None:
                     means = T.sigmoid(out[:, :1, :, :])
