@@ -238,7 +238,17 @@ def go(arg):
 
     opt = torch.optim.Adam(lr=arg.lr, params=list(encoder.parameters()) + list(decoder.parameters()))
 
+    if arg.esched  is not None:
+        start, end = int(arg.esched[0] * arg.epochs), (arg.esched[1] * arg.epochs)
+        slope = 1.0/(end-start)
+
     for epoch in range(arg.epochs):
+
+        if arg.esched is not None:
+            weight = (epoch - start) * slope
+            weight = np.clip(weight, 0, 1)
+        else:
+            weight = 1.0
 
         for i, (input, _) in enumerate(tqdm.tqdm(trainloader)):
             if arg.limit is not None and i * arg.batch_size > arg.limit:
@@ -271,7 +281,7 @@ def go(arg):
                 # - np.log(za) + np.log1p(-eza + EPS) - np.log1p(eza + EPS)
                 logpart = - (za + arg.eps).log() + (-eza + arg.eps).log1p() - (eza + arg.eps).log1p()
 
-                rloss = rloss + logpart
+                rloss = rloss + weight * logpart
 
             elif arg.rloss == 'gauss': # xent + correction
                 if arg.scale is None:
@@ -367,6 +377,13 @@ if __name__ == "__main__":
                         help="Number of epochs.",
                         default=30, type=int)
 
+    parser.add_argument("--part-sched",
+                        dest="esched",
+                        nargs=2,
+                        help="Schedule for scaling the partition function. Linear from 0 to 1 between these two proportions of the "
+                             "toal nr of epochs.",
+                        default=None, type=float)
+
     parser.add_argument("--evaluate-every",
                         dest="eval_every",
                         help="Run an evaluation/sample every n epochs.",
@@ -385,7 +402,8 @@ if __name__ == "__main__":
 
     parser.add_argument("-d", "--vae-depth",
                         dest="vae_depth",
-                        help="Depth of the VAE in blocks (in addition to the 3 default blocks). Each block halves the resolution in each dimension with a 2x2 maxpooling layer.",
+                        help="Depth of the VAE in blocks (in addition to the 3 default blocks). Each block halves the "
+                             "resolution in each dimension with a 2x2 maxpooling layer.",
                         default=0, type=int)
 
     parser.add_argument("-b", "--batch-size",
