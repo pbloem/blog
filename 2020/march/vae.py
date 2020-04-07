@@ -307,11 +307,11 @@ def go(arg):
             elif arg.rloss == 'gauss': # xent + correction
                 if arg.scale is None:
                     means = T.sigmoid(out[:, :c, :, :])
-                    vars  = F.sigmoid( out[:, c:, :, :])
+                    vars  = F.sigmoid(out[:, c:, :, :])
 
                     rloss = GAUSS_CONST + vars.log() + (1.0/(2.0 * vars.pow(2.0))) * (out - means).pow(2.0)
                 else:
-                    means = out[:, :c, :, :]
+                    means = T.sigmoid(out[:, :c, :, :])
                     var = arg.scale
 
                     rloss = GAUSS_CONST + ln(var) + (1.0/(2.0 * (var * var))) * (out - means).pow(2.0)
@@ -322,7 +322,7 @@ def go(arg):
 
                     rloss = (2.0 * vars).log() + (1.0/vars) * (out - means).abs()
                 else:
-                    means = out[:, :c, :, :]
+                    means = T.sigmoid(out[:, :c, :, :])
                     var = arg.scale
 
                     rloss = ln(2.0 * var) + (1.0/var) * (out - means).abs()
