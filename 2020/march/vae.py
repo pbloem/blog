@@ -93,6 +93,10 @@ class Flatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), -1)
 
+class Pass(nn.Module):
+    def forward(self, input):
+        return input
+
 class Reshape(nn.Module):
     def __init__(self, shape):
         super().__init__()
@@ -117,7 +121,7 @@ class Encoder(nn.Module):
     Encoder for a VAE
     """
 
-    def __init__(self, zsize=32, colors=3):
+    def __init__(self, zsize=32, colors=3, bn=False):
 
         super().__init__()
 
@@ -125,12 +129,15 @@ class Encoder(nn.Module):
 
         self.stack = nn.Sequential(
             nn.Conv2d(1, a, (3, 3), padding=1), nn.ReLU(),
+            nn.BatchNorm2d(a) if bn else Pass(),
             nn.MaxPool2d((2, 2)),
             nn.Conv2d(a, b, (3, 3), padding=1), nn.ReLU(),
             nn.Conv2d(b, b, (3, 3), padding=1), nn.ReLU(),
+            nn.BatchNorm2d(b) if bn else Pass(),
             nn.MaxPool2d((2, 2)),
             nn.Conv2d(b, c, (3, 3), padding=1), nn.ReLU(),
             nn.Conv2d(c, c, (3, 3), padding=1), nn.ReLU(),
+            nn.BatchNorm2d(c) if bn else Pass(),
             nn.MaxPool2d((2, 2)),
             # Debug(lambda x: print(x.size())),
             nn.Flatten(),
@@ -145,7 +152,7 @@ class Decoder(nn.Module):
     """
     Decoder for a VAE
     """
-    def __init__(self, zsize=32, out_channels=1, mult=1.0):
+    def __init__(self, zsize=32, out_channels=1, mult=1.0, bn=False):
         super().__init__()
 
         a, b, c = 16, 32, 128
@@ -153,10 +160,15 @@ class Decoder(nn.Module):
         self.stack = nn.Sequential(
             nn.Linear(zsize, c * 4 * 4), nn.ReLU(),
             Reshape((c, 4, 4)),
+            nn.BatchNorm2d(c) if bn else Pass(),
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
             nn.ConvTranspose2d(c, b, (3, 3), padding=1), nn.ReLU(),
+            nn.ConvTranspose2d(b, b, (3, 3), padding=1), nn.ReLU(),
+            nn.BatchNorm2d(b) if bn else Pass(),
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
             nn.ConvTranspose2d(b, a, (3, 3), padding=1), nn.ReLU(),
+            nn.ConvTranspose2d(a, a, (3, 3), padding=1), nn.ReLU(),
+            nn.BatchNorm2d(a) if bn else Pass(),
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False),
             nn.ConvTranspose2d(a, out_channels, (3, 3), padding=1)
         )
@@ -294,23 +306,23 @@ def go(arg):
 
             elif arg.rloss == 'gauss': # xent + correction
                 if arg.scale is None:
-                    means = T.sigmoid(out[:, :1, :, :])
-                    vars  = F.sigmoid( out[:, 1:, :, :])
+                    means = T.sigmoid(out[:, :c, :, :])
+                    vars  = F.sigmoid( out[:, c:, :, :])
 
                     rloss = GAUSS_CONST + vars.log() + (1.0/(2.0 * vars.pow(2.0))) * (out - means).pow(2.0)
                 else:
-                    means = out[:, :1, :, :]
+                    means = out[:, :c, :, :]
                     var = arg.scale
 
                     rloss = GAUSS_CONST + ln(var) + (1.0/(2.0 * (var * var))) * (out - means).pow(2.0)
             elif arg.rloss == 'laplace':  # xent + correction
                 if arg.scale is None:
-                    means = T.sigmoid(out[:, :1, :, :])
-                    vars  = F.softplus( out[:, 1:, :, :])
+                    means = T.sigmoid(out[:, :c, :, :])
+                    vars  = F.softplus( out[:, c:, :, :])
 
                     rloss = (2.0 * vars).log() + (1.0/vars) * (out - means).abs()
                 else:
-                    means = out[:, :1, :, :]
+                    means = out[:, :c, :, :]
                     var = arg.scale
 
                     rloss = ln(2.0 * var) + (1.0/var) * (out - means).abs()
@@ -459,6 +471,11 @@ if __name__ == "__main__":
                         dest="tb_dir",
                         help="Tensorboard directory",
                         default='./runs/pixel', type=str)
+
+    parser.add_argument("--batch-norm",
+                        dest="batch_norm",
+                        help="Use batch normalization",
+                        action='store_true')
 
     options = parser.parse_args()
 
