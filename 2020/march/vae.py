@@ -340,11 +340,11 @@ def go(arg):
                     rloss = GAUSS_CONST + ln(var) + (1.0/(2.0 * (var * var))) * (input - means).pow(2.0)
 
             elif arg.rloss == 'mse':
-                means = T.sigmoid(out)
+                means = T.sigmoid(out[:, :c, :, :])
                 rloss = (input - means).pow(2.0)
 
             elif arg.rloss == 'mae':
-                means = T.sigmoid(out)
+                means = T.sigmoid(out[:, :c, :, :])
                 rloss = (input - means).abs()
 
             elif arg.rloss == 'laplace':  # xent + correction
