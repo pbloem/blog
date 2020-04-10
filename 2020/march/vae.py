@@ -179,6 +179,21 @@ class Decoder(nn.Module):
 
         return self.mult * self.stack(z)
 
+
+class Test(nn.Module):
+    """
+    """
+
+    def __init__(self, out_channels=1, height=32, width=32):
+        super().__init__()
+
+        self.p = nn.Parameter(torch.randn(1, out_channels, height, width))
+
+
+    def forward(self, x):
+
+        return self.p.expand_as(x)
+
 def go(arg):
 
     tbw = SummaryWriter(log_dir=arg.tb_dir)
@@ -250,8 +265,12 @@ def go(arg):
 
     print(f'out channels: {out_channels}')
 
+
     encoder = Encoder(zsize=arg.zsize, colors=C)
     decoder = Decoder(zsize=arg.zsize, out_channels=out_channels, mult=arg.mult)
+
+    if arg.testmodel:
+        decoder = Test(out_channels=out_channels, height=H, width=W)
 
     if torch.cuda.is_available():
         encoder.cuda()
@@ -281,12 +300,16 @@ def go(arg):
                 input = input.cuda()
 
             # Forward pass
-            zs = encoder(input)
+            if not arg.testmodel:
+                zs = encoder(input)
 
-            kloss = kl_loss(zs[:, :arg.zsize], zs[:, arg.zsize:])
-            z = sample(zs[:, :arg.zsize], zs[:, arg.zsize:])
+                kloss = kl_loss(zs[:, :arg.zsize], zs[:, arg.zsize:])
+                z = sample(zs[:, :arg.zsize], zs[:, arg.zsize:])
 
-            out = decoder(z)
+                out = decoder(z)
+            else:
+                out = decoder(input)
+                kloss = 0
 
             # compute -log p per dimension
             if arg.rloss == 'xent': # binary cross-entropy (not a proper log-prob)
@@ -309,12 +332,21 @@ def go(arg):
                     means = T.sigmoid(out[:, :c, :, :])
                     vars  = F.sigmoid(out[:, c:, :, :])
 
-                    rloss = GAUSS_CONST + vars.log() + (1.0/(2.0 * vars.pow(2.0))) * (out - means).pow(2.0)
+                    rloss = GAUSS_CONST + vars.log() + (1.0/(2.0 * vars.pow(2.0))) * (input - means).pow(2.0)
                 else:
                     means = T.sigmoid(out[:, :c, :, :])
                     var = arg.scale
 
-                    rloss = GAUSS_CONST + ln(var) + (1.0/(2.0 * (var * var))) * (out - means).pow(2.0)
+                    rloss = GAUSS_CONST + ln(var) + (1.0/(2.0 * (var * var))) * (input - means).pow(2.0)
+
+            elif arg.rloss == 'mse':
+                means = T.sigmoid(out)
+                rloss = (input - means).pow(2.0)
+
+            elif arg.rloss == 'mae':
+                means = T.sigmoid(out)
+                rloss = (input - means).abs()
+
             elif arg.rloss == 'laplace':  # xent + correction
                 if arg.scale is None:
                     means = T.sigmoid(out[:, :c, :, :])
@@ -352,8 +384,13 @@ def go(arg):
 
             b, c, h, w = inputs.size()
 
-            zs = encoder(inputs)
-            outputs = decoder(zs[:, :arg.zsize])[:, :c, :, :]
+
+            if not arg.testmodel:
+                zs = encoder(inputs)
+                outputs = decoder(zs[:, :arg.zsize])[:, :c, :, :]
+            else:
+                outputs = decoder(inputs)
+
             outputs = T.sigmoid(outputs)
 
             plt.figure(figsize=(5, 2))
@@ -475,6 +512,11 @@ if __name__ == "__main__":
     parser.add_argument("--batch-norm",
                         dest="batch_norm",
                         help="Use batch normalization",
+                        action='store_true')
+
+    parser.add_argument("--testmodel",
+                        dest="testmodel",
+                        help="A model consisting of just a parameter per output dimension",
                         action='store_true')
 
     options = parser.parse_args()
