@@ -352,12 +352,12 @@ def go(arg):
                     means = T.sigmoid(out[:, :c, :, :])
                     vars  = F.softplus( out[:, c:, :, :])
 
-                    rloss = (2.0 * vars).log() + (1.0/vars) * (out - means).abs()
+                    rloss = (2.0 * vars).log() + (1.0/vars) * (input - means).abs()
                 else:
                     means = T.sigmoid(out[:, :c, :, :])
                     var = arg.scale
 
-                    rloss = ln(2.0 * var) + (1.0/var) * (out - means).abs()
+                    rloss = ln(2.0 * var) + (1.0/var) * (input - means).abs()
             else:
                 raise Exception(f'reconstruction loss {arg.rloss} not recognized.')
 
