@@ -374,7 +374,7 @@ def go(arg):
                 ms = mus/sgs
                 s12 = (1/(2 * sgs))
 
-                rloss = - ln2 - ln2 + 2.0 * ln1y + lsgs + GAUSS_CONST + s12 * mus * mus \
+                rloss = - ln2 - lny + 2.0 * ln1y + lsgs + GAUSS_CONST + s12 * mus * mus \
                         - ms * lny + ms * ln1y + s12 * (lny - ln1y).pow(2)
 
             else:
