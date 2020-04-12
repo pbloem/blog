@@ -192,7 +192,9 @@ class Test(nn.Module):
 
     def forward(self, x):
 
-        return self.p.expand_as(x)
+        b, c, h, w = x.size()
+        oc = self.p.size(1)
+        return self.p.expand(b, oc, h, w)
 
 def go(arg):
 
@@ -259,12 +261,11 @@ def go(arg):
         raise Exception('Task {} not recognized.'.format(arg.task))
 
     ## Set up the model
-    out_channels = 1
-    if (arg.rloss == 'gauss' or arg.rloss=='laplace') and arg.scale is None:
-        out_channels = 2
+    out_channels = C
+    if (arg.rloss == 'gauss' or arg.rloss=='laplace' or arg.rloss=='signorm') and arg.scale is None:
+        out_channels = 2 * C
 
     print(f'out channels: {out_channels}')
-
 
     encoder = Encoder(zsize=arg.zsize, colors=C)
     decoder = Decoder(zsize=arg.zsize, out_channels=out_channels, mult=arg.mult)
@@ -358,6 +359,24 @@ def go(arg):
                     var = arg.scale
 
                     rloss = ln(2.0 * var) + (1.0/var) * (input - means).abs()
+
+            elif arg.rloss == 'signorm':
+                assert out.size(1) == 2 * c
+
+                mus = out[:, :c, :, :]
+                sgs, lsgs  = T.exp(out[:, c:, :, :]), out[:, c:, :, :]
+
+                y = input
+
+                ln2 = math.log(2)
+                lny = torch.log(y + arg.eps)
+                ln1y = torch.log(1 - y + arg.eps)
+                ms = mus/sgs
+                s12 = (1/(2 * sgs))
+
+                rloss = - ln2 - ln2 + 2.0 * ln1y + lsgs + GAUSS_CONST + s12 * mus * mus \
+                        - ms * lny + ms * ln1y + s12 * (lny - ln1y).pow(2)
+
             else:
                 raise Exception(f'reconstruction loss {arg.rloss} not recognized.')
 
@@ -389,7 +408,7 @@ def go(arg):
                 zs = encoder(inputs)
                 outputs = decoder(zs[:, :arg.zsize])[:, :c, :, :]
             else:
-                outputs = decoder(inputs)
+                outputs = decoder(inputs)[:, :c, :, :]
 
             outputs = T.sigmoid(outputs)
 
