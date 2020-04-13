@@ -362,10 +362,9 @@ def go(arg):
 
             elif arg.rloss == 'signorm':
                 if arg.scale is None:
-                    M = 0.01
 
                     mus = out[:, :c, :, :]
-                    sgs, lsgs  = T.exp(out[:, c:, :, :] * M), out[:, c:, :, :] * M
+                    sgs, lsgs  = T.exp(out[:, c:, :, :] * arg.varmult), out[:, c:, :, :] * arg.varmult
 
                 else:
                     mus = out[:, :c, :, :]
@@ -514,6 +513,11 @@ if __name__ == "__main__":
     parser.add_argument("--eps",
                         dest="eps",
                         help="Epsilon for stability.",
+                        default=10e-5, type=float)
+
+    parser.add_argument("--varmult",
+                        dest="varmult",
+                        help="Multiplier for the variance logits.",
                         default=10e-5, type=float)
 
     parser.add_argument("--mult",
