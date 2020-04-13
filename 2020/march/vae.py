@@ -504,7 +504,7 @@ def go(arg):
                 n, c, h, w = images.size()
 
                 z = encoder(imagesg)
-                latents = z[:, :2].data
+                latents = z[:, :2].data.detach().cpu()
 
                 mn, mx = latents.min(), latents.max()
                 size = 1.0 * (mx - mn) / math.sqrt(n)
