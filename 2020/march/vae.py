@@ -361,12 +361,14 @@ def go(arg):
                     rloss = ln(2.0 * var) + (1.0/var) * (input - means).abs()
 
             elif arg.rloss == 'signorm':
+
                 assert out.size(1) == 2 * c
 
                 mus = out[:, :c, :, :]
                 sgs, lsgs  = T.exp(out[:, c:, :, :]), out[:, c:, :, :]
 
                 y = input
+                x =  (y + arg.eps).log() - (1 - y + arg.eps).log()
 
                 ln2 = math.log(2)
                 lny = torch.log(y + arg.eps)
@@ -374,8 +376,9 @@ def go(arg):
                 ms = mus/sgs
                 s12 = (1/(2 * sgs))
 
-                rloss = - ln2 - lny + 2.0 * ln1y + lsgs + GAUSS_CONST + s12 * mus * mus \
-                        - ms * lny + ms * ln1y + s12 * (lny - ln1y).pow(2)
+
+                rloss = lny + ln1y + lsgs + GAUSS_CONST + \
+                       0.5 * (1.0 / (sgs * sgs + arg.eps)) * (x - mus) ** 2
 
             else:
                 raise Exception(f'reconstruction loss {arg.rloss} not recognized.')
