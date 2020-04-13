@@ -5,6 +5,7 @@ import torch as T
 
 from torch import nn
 import torch.nn.functional as F
+import torch.distributions as ds
 
 import numpy as np
 
@@ -405,20 +406,29 @@ def go(arg):
 
             b, c, h, w = inputs.size()
 
-
             if not arg.testmodel:
                 zs = encoder(inputs)
-                outputs = decoder(zs[:, :arg.zsize])[:, :c, :, :]
+                res = decoder(zs[:, :arg.zsize])
             else:
-                outputs = decoder(inputs)[:, :c, :, :]
+                res = decoder(inputs)
+
+            outputs = res[:, :c, :, :]
 
             outputs = T.sigmoid(outputs)
 
-            plt.figure(figsize=(5, 2))
+            samples = None
+            if arg.rloss == 'signorm' and out_channels > c:
+                means = res[:, :c, :, :]
+                vars = res[:, c:, :, :]
+
+                normal = ds.Normal(means, vars)
+                samples = T.sigmoid(normal.sample())
+
+            plt.figure(figsize=(5, 4))
 
             for i in range(N):
 
-                ax = plt.subplot(2, N, i+1)
+                ax = plt.subplot(4, N, i+1)
                 inp = inputs[i].permute(1, 2, 0).cpu().numpy()
                 if c == 1:
                     inp = inp.squeeze()
@@ -429,7 +439,7 @@ def go(arg):
                     ax.set_title('input')
                 plt.axis('off')
 
-                ax = plt.subplot(2, N, N+i+1)
+                ax = plt.subplot(4, N, N+i+1)
 
                 outp = outputs[i].permute(1, 2, 0).cpu().numpy()
                 if c == 1:
@@ -438,8 +448,39 @@ def go(arg):
                 ax.imshow(outp, cmap='gray_r')
 
                 if i == 0:
-                    ax.set_title('reconstruction')
+                    ax.set_title('means')
                 plt.axis('off')
+
+                if samples is not None: # plot samples
+
+                    ax = plt.subplot(4, N, 2 * N + i + 1)
+
+                    outp = samples[i].permute(1, 2, 0).detach().cpu().numpy()
+                    if c == 1:
+                        outp = outp.squeeze()
+
+                    ax.imshow(outp, cmap='gray_r')
+
+                    if i == 0:
+                        ax.set_title('var')
+                    plt.axis('off')
+
+                if out_channels > c: # plot the variance (or other uncertainty)
+
+                    ax = plt.subplot(4, N, 3 * N + i + 1)
+
+                    outp = res[i, c:, :, :].permute(1, 2, 0).detach().cpu().numpy()
+                    if c == 1:
+                        outp = outp.squeeze()
+
+                    ax.imshow(outp, cmap='copper')
+
+                    if i == 0:
+                        ax.set_title('var')
+                    plt.axis('off')
+
+
+
 
             plt.tight_layout()
 
