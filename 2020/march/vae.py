@@ -419,7 +419,7 @@ def go(arg):
             samples = None
             if arg.rloss == 'signorm' and out_channels > c:
                 means = res[:, :c, :, :]
-                vars = res[:, c:, :, :]
+                vars = res[:, c:, :, :] * arg.varmult
 
                 normal = ds.Normal(means, vars)
                 samples = T.sigmoid(normal.sample())
