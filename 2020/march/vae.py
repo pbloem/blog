@@ -362,9 +362,10 @@ def go(arg):
 
             elif arg.rloss == 'signorm':
                 if arg.scale is None:
+                    M = 0.01
 
                     mus = out[:, :c, :, :]
-                    sgs, lsgs  = T.exp(out[:, c:, :, :]), out[:, c:, :, :]
+                    sgs, lsgs  = T.exp(out[:, c:, :, :] * M), out[:, c:, :, :] * M
 
                 else:
                     mus = out[:, :c, :, :]
