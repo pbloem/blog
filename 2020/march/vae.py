@@ -497,9 +497,13 @@ def go(arg):
 
                 images, labels = torch.cat(images, dim=0), torch.cat(labels, dim=0)
 
+                imagesg = images
+                if torch.cuda.is_available():
+                    imagesg = imagesg.cuda()
+
                 n, c, h, w = images.size()
 
-                z = encoder(images)
+                z = encoder(imagesg)
                 latents = z[:, :2].data
 
                 mn, mx = latents.min(), latents.max()
