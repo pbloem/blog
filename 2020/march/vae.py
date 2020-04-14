@@ -263,7 +263,7 @@ def go(arg):
 
     ## Set up the model
     out_channels = C
-    if (arg.rloss == 'gauss' or arg.rloss=='laplace' or arg.rloss=='signorm') and arg.scale is None:
+    if (arg.rloss == 'gauss' or arg.rloss=='laplace' or arg.rloss=='signorm' or arg.rloss == 'siglaplace') and arg.scale is None:
         out_channels = 2 * C
 
     print(f'out channels: {out_channels}')
@@ -372,13 +372,35 @@ def go(arg):
                     sgs, lsgs = arg.scale, math.log(arg.scale)
 
                 y = input
-                x = (y + arg.eps).log() - (1 - y + arg.eps).log()
 
                 lny = torch.log(y + arg.eps)
                 ln1y = torch.log(1 - y + arg.eps)
 
+                x = lny - ln1y
+
                 rloss = lny + ln1y + lsgs + GAUSS_CONST + \
                         0.5 * (1.0 / (sgs * sgs + arg.eps)) * (x - mus) ** 2
+
+            elif arg.rloss == 'siglaplace':
+
+                if arg.scale is None:
+
+                    mus = out[:, :c, :, :]
+                    sgs, lsgs  = T.exp(out[:, c:, :, :] * arg.varmult), out[:, c:, :, :] * arg.varmult
+
+                else:
+                    mus = out[:, :c, :, :]
+                    sgs, lsgs = arg.scale, math.log(arg.scale)
+
+                y = input
+
+                lny = torch.log(y + arg.eps)
+                ln1y = torch.log(1 - y + arg.eps)
+
+                x = lny - ln1y
+
+                rloss = lny + ln1y + lsgs + math.log(2.0) + \
+                        (x - mus).abs() / sgs
 
             else:
                 raise Exception(f'reconstruction loss {arg.rloss} not recognized.')
@@ -413,16 +435,23 @@ def go(arg):
                 res = decoder(inputs)
 
             outputs = res[:, :c, :, :]
-
             outputs = T.sigmoid(outputs)
 
             samples = None
+
             if arg.rloss == 'signorm' and out_channels > c:
                 means = res[:, :c, :, :]
                 vars = res[:, c:, :, :] * arg.varmult
 
                 normal = ds.Normal(means, vars)
                 samples = T.sigmoid(normal.sample())
+
+            if arg.rloss == 'siglaplace' and out_channels > c:
+                means = res[:, :c, :, :]
+                vars = res[:, c:, :, :] * arg.varmult
+
+                laplace = ds.Laplace(means, vars)
+                samples = T.sigmoid(laplace.sample())
 
             plt.figure(figsize=(5, 4))
 
@@ -462,7 +491,7 @@ def go(arg):
                     ax.imshow(outp, cmap='gray_r')
 
                     if i == 0:
-                        ax.set_title('var')
+                        ax.set_title('sampled')
                     plt.axis('off')
 
                 if out_channels > c: # plot the variance (or other uncertainty)
