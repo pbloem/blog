@@ -406,7 +406,7 @@ def go(arg):
 
 
                 mean  = T.sigmoid(out[:, :c, :, :])
-                mult  = (out[:, c:, :, :] + arg.beta_add).exp() + (1.0/(mean + arg.eps)) + arg.eps
+                mult  = F.softplus(out[:, c:, :, :] + arg.beta_add) + (1.0/(mean + arg.eps)) + arg.eps
 
                 alpha = mean * mult
                 beta  = (1 - mean) * mult
