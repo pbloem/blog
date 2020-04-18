@@ -406,7 +406,7 @@ def go(arg):
 
 
                 mean  = T.sigmoid(out[:, :c, :, :])
-                mult  = (out[:, c:, :, :] + arg.beta_add).exp() + (1.0/mean) + arg.eps
+                mult  = (out[:, c:, :, :] + arg.beta_add).exp() + (1.0/(mean + arg.eps)) + arg.eps
 
                 alpha = mean * mult
                 beta  = (1 - mean) * mult
@@ -420,7 +420,17 @@ def go(arg):
                 raise Exception(f'reconstruction loss {arg.rloss} not recognized.')
 
             if contains_nan(rloss):
+                if arg.rloss == 'beta':
+                    print('part contains nan', contains_nan(part))
+
+                    print('alpha contains nan', contains_nan(alpha))
+                    print('beta  contains nan', contains_nan(beta))
+
+                    print('log x contains nan', contains_nan((x + arg.eps).log()))
+                    print('log (1-x)  contains nan', contains_nan((1 - x + arg.eps).log()))
+
                 raise Exception('rloss contains nan')
+
 
             rloss = rloss.reshape(b, -1).sum(dim=1) # reduce
             loss  = (rloss + kloss).mean()
