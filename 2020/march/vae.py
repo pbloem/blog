@@ -263,7 +263,7 @@ def go(arg):
 
     ## Set up the model
     out_channels = C
-    if (arg.rloss == 'gauss' or arg.rloss=='laplace' or arg.rloss=='signorm' or arg.rloss == 'siglaplace') and arg.scale is None:
+    if (arg.rloss == 'gauss' or arg.rloss=='laplace' or arg.rloss=='signorm' or arg.rloss == 'siglaplace' or arg.rloss == 'beta') and arg.scale is None:
         out_channels = 2 * C
 
     print(f'out channels: {out_channels}')
@@ -402,6 +402,18 @@ def go(arg):
                 rloss = lny + ln1y + lsgs + math.log(2.0) + \
                         (x - mus).abs() / sgs
 
+            elif arg.rloss == 'beta':
+
+                ADD = 1.1
+
+                alpha = (out[:, :c, :, :] + arg.beta_add).exp() + ADD
+                beta  = (out[:, c:, :, :] + arg.beta_add).exp() + ADD
+
+                part = alpha.lgamma() + beta.lgamma() - (alpha + beta).lgamma()
+                x = input
+
+                rloss = - (alpha - 1) * (x + arg.eps).log() - (beta - 1) * (1 - x + arg.eps).log() + part
+
             else:
                 raise Exception(f'reconstruction loss {arg.rloss} not recognized.')
 
@@ -435,7 +447,7 @@ def go(arg):
                 res = decoder(inputs)
 
             outputs = res[:, :c, :, :]
-            outputs = T.sigmoid(outputs)
+            means = T.sigmoid(outputs)
 
             samples = None
 
@@ -443,15 +455,27 @@ def go(arg):
                 means = res[:, :c, :, :]
                 vars = res[:, c:, :, :] * arg.varmult
 
-                normal = ds.Normal(means, vars)
-                samples = T.sigmoid(normal.sample())
+                dist = ds.Normal(means, vars)
+                samples = T.sigmoid(dist.sample())
+                means   = T.sigmoid(dist.mean)
 
             if arg.rloss == 'siglaplace' and out_channels > c:
                 means = res[:, :c, :, :]
                 vars = res[:, c:, :, :] * arg.varmult
 
-                laplace = ds.Laplace(means, vars)
-                samples = T.sigmoid(laplace.sample())
+                dist = ds.Laplace(means, vars)
+                samples = T.sigmoid(dist.sample())
+                means   = T.sigmoid(dist.mean)
+
+            if arg.rloss == 'beta':
+
+                alpha = out[:, :c, :, :].exp() + ADD
+                beta  = out[:, c:, :, :].exp() + ADD
+
+                dist = ds.Beta(alpha, beta)
+                samples = dist.sample()
+                means   = dist.mean
+                vars    = dist.variance
 
             plt.figure(figsize=(5, 4))
 
@@ -470,14 +494,14 @@ def go(arg):
 
                 ax = plt.subplot(4, N, N+i+1)
 
-                outp = outputs[i].permute(1, 2, 0).cpu().numpy()
+                outp = means[i].permute(1, 2, 0).cpu().numpy()
                 if c == 1:
                     outp = outp.squeeze()
 
                 ax.imshow(outp, cmap='gray_r')
 
                 if i == 0:
-                    ax.set_title('means')
+                    ax.set_title('means/modes')
                 plt.axis('off')
 
                 if samples is not None: # plot samples
@@ -498,7 +522,7 @@ def go(arg):
 
                     ax = plt.subplot(4, N, 3 * N + i + 1)
 
-                    outp = res[i, c:, :, :].permute(1, 2, 0).detach().cpu().numpy()
+                    outp = vars[i].permute(1, 2, 0).detach().cpu().numpy()
                     if c == 1:
                         outp = outp.squeeze()
 
@@ -638,6 +662,11 @@ if __name__ == "__main__":
                         dest="eps",
                         help="Epsilon for stability.",
                         default=10e-5, type=float)
+
+    parser.add_argument("--beta-add",
+                        dest="beta_add",
+                        help="Value added to beta before exp.",
+                        default=3.0, type=float)
 
     parser.add_argument("--varmult",
                         dest="varmult",
