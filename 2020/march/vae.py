@@ -404,7 +404,7 @@ def go(arg):
 
             elif arg.rloss == 'beta':
 
-                ADD = 1.1
+                ADD = 2.0
 
                 alpha = (out[:, :c, :, :] + arg.beta_add).exp() + ADD
                 beta  = (out[:, c:, :, :] + arg.beta_add).exp() + ADD
@@ -469,8 +469,8 @@ def go(arg):
 
             if arg.rloss == 'beta':
 
-                alpha = out[:, :c, :, :].exp() + ADD
-                beta  = out[:, c:, :, :].exp() + ADD
+                alpha = (res[:, :c, :, :] + arg.beta_add).exp() + ADD
+                beta  = (res[:, c:, :, :] + arg.beta_add).exp() + ADD
 
                 dist = ds.Beta(alpha, beta)
                 samples = dist.sample()
