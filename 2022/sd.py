@@ -1,5 +1,5 @@
 from diffusers import StableDiffusionPipeline
-import torch, fire, unicodedata
+import torch, fire, unicodedata, re
 
 TOKEN = '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' # my token, please generate your own if you copy this: https://huggingface.co/settings/tokens
 
